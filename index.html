@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>纳科农品 - 农产品合格证生成系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2E7D32',
+                        secondary: '#F57C00',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .form-input { @apply w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent; }
+            .btn-primary { @apply bg-primary text-white font-medium px-6 py-3 rounded-lg hover:bg-primary/90 transition-colors; }
+            .card { @apply bg-white rounded-lg shadow-md p-4 md:p-6 mb-6; }
+            .certificate { @apply w-full max-w-[600px] border-2 border-primary rounded-lg p-4 sm:p-6 mx-auto bg-white; }
+            .loading { @apply inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2; }
+        }
+
+        /* 强制限制二维码尺寸 */
+        #qrcode {
+            width: 96px !important;
+            height: 96px !important;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #qrcode img {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-primary text-white sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-3 flex flex-col sm:flex-row justify-between items-center">
+            <div class="flex items-center mb-2 sm:mb-0">
+                <i class="fa-solid fa-leaf text-2xl mr-2"></i>
+                <span class="font-bold text-xl">纳科农品 | Natcropp</span>
+            </div>
+            <div class="flex items-center">
+                <span class="text-sm">+86-15922933088</span>
+                <span class="text-xs ml-2 bg-white/20 px-2 py-1 rounded">仂昭国际贸易</span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mx-auto px-4 py-6 sm:py-8">
+        <div class="card text-center mb-6">
+            <h1 class="text-2xl font-bold text-primary mb-3">农产品质量安全承诺达标合格证</h1>
+            <p class="text-gray-600 mb-4">填写信息，一键生成合规合格证</p>
+        </div>
+
+        <!-- 填报区 -->
+        <div class="card" id="formSection">
+            <h2 class="text-lg font-bold mb-4 text-primary border-b pb-2">信息填报</h2>
+            <form id="certForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="md:col-span-2"><h3 class="font-medium mb-3 text-secondary text-sm">一、主体信息</h3></div>
+                <div><label class="block text-gray-700 mb-2">主体名称 <span class="text-red-500">*</span></label><input type="text" id="operatorName" class="form-input" required></div>
+                <div><label class="block text-gray-700 mb-2">主体类型 <span class="text-red-500">*</span></label><select id="operatorType" class="form-input" required><option value="">请选择</option><option value="农户">农户</option><option value="企业">农业企业</option><option value="合作社">合作社</option></select></div>
+                <div><label class="block text-gray-700 mb-2">生产地址 <span class="text-red-500">*</span></label><input type="text" id="operatorAddress" class="form-input" required></div>
+                <div><label class="block text-gray-700 mb-2">联系电话 <span class="text-red-500">*</span></label><input type="tel" id="operatorPhone" class="form-input" required pattern="^1[3-9]\d{9}$"></div>
+
+                <div class="md:col-span-2"><h3 class="font-medium mb-3 text-secondary text-sm">二、产品信息</h3></div>
+                <div><label class="block text-gray-700 mb-2">产品名称 <span class="text-red-500">*</span></label><input type="text" id="productName" class="form-input" required></div>
+                <div><label class="block text-gray-700 mb-2">品种</label><input type="text" id="productVariety" class="form-input"></div>
+                <div><label class="block text-gray-700 mb-2">数量/重量 <span class="text-red-500">*</span></label><input type="text" id="productQuantity" class="form-input" required></div>
+                <div><label class="block text-gray-700 mb-2">日期 <span class="text-red-500">*</span></label><input type="date" id="produceDate" class="form-input" required></div>
+
+                <div class="md:col-span-2"><h3 class="font-medium mb-3 text-secondary text-sm">三、承诺信息</h3></div>
+                <div><label class="block text-gray-700 mb-2">检测结果 <span class="text-red-500">*</span></label><select id="detectResult" class="form-input" required><option value="">请选择</option><option value="合格">合格</option><option value="未检测（承诺合格）">未检测</option></select></div>
+                <div><label class="block text-gray-700 mb-2">承诺人 <span class="text-red-500">*</span></label><input type="text" id="promisorName" class="form-input" required></div>
+                
+                <div class="md:col-span-2">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="promiseAgree" class="w-4 h-4 mr-2" required>
+                        <span class="text-sm">我承诺以上信息真实有效，承担法律责任。</span>
+                    </label>
+                </div>
+
+                <div class="md:col-span-2 flex justify-center mt-4">
+                    <button type="submit" id="submitBtn" class="btn-primary w-full md:w-auto">
+                        <i class="fa-solid fa-check mr-2"></i>生成合格证
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- 预览区 -->
+        <div class="card hidden" id="previewSection">
+            <h2 class="text-lg font-bold mb-4 text-primary border-b pb-2">合格证预览</h2>
+            
+            <div class="certificate mb-6" id="certificate">
+                <!-- 优化后的布局：标题和二维码垂直排列 -->
+                <div class="flex flex-col items-center mb-4">
+                    <h2 class="text-xl font-bold text-primary mb-3">农产品质量安全承诺达标合格证</h2>
+                    <div id="qrcode" class="w-24 h-24"></div>
+                </div>
+                
+                <table class="w-full border-collapse mb-4 text-sm">
+                    <tbody>
+                        <tr class="border-b border-gray-200">
+                            <td class="py-2 w-1/3 font-medium">主体名称</td>
+                            <td class="py-2" id="preview主体名称">-</td>
+                        </tr>
+                        <tr class="border-b border-gray-200">
+                            <td class="py-2 font-medium">主体类型</td>
+                            <td class="py-2" id="preview主体类型">-</td>
+                        </tr>
+                        <tr class="border-b border-gray-200">
+                            <td class="py-2 font-medium">生产地址</td>
+                            <td class="py-2" id="preview生产地址">-</td>
+                        </tr>
+                        <tr class="border-b border-gray-200">
+                            <td class="py-2 font-medium">联系电话</td>
+                            <td class="py-2" id="preview联系电话">-</td>
+                        </tr>
+                        <tr class="border-b border-gray-200">
+                            <td class="py-2 font-medium">产品名称</td>
+                            <td class="py-2" id="preview产品名称">-</td>
+                        </tr>
+                        <tr class="border-b border-gray-200">
+                            <td class="py-2 font-medium">品种</td>
+                            <td class="py-2" id="preview品种">-</td>
+                        </tr>
+                        <tr class="border-b border-gray-200">
+                            <td class="py-2 font-medium">数量</td>
+                            <td class="py-2" id="preview数量">-</td>
+                        </tr>
+                        <tr class="border-b border-gray-200">
+                            <td class="py-2 font-medium">日期</td>
+                            <td class="py-2" id="preview日期">-</td>
+                        </tr>
+                        <tr class="border-b border-gray-200">
+                            <td class="py-2 font-medium">检测结果</td>
+                            <td class="py-2" id="preview检测结果">-</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div class="mt-4 text-sm">
+                    <p class="italic">承诺人：<span id="preview承诺人">-</span></p>
+                    <p class="mt-2">本批次农产品符合质量安全标准，本人对真实性负责。</p>
+                    <p class="text-right mt-3">生成时间：<span id="preview生成时间">-</span></p>
+                    <p class="text-right text-xs text-gray-500 mt-1">纳科农品 © 仂昭国际贸易</p>
+                </div>
+            </div>
+
+            <!-- 新增：完整信息复制 + 同步到公众号 -->
+            <div class="bg-gray-50 p-4 rounded-lg mb-4">
+                <h3 class="text-sm font-medium text-primary mb-2">📌 同步信息到公众号（方便查询/统计）</h3>
+                <textarea id="fullCertInfo" class="w-full p-2 border border-gray-200 rounded-lg text-xs mb-2" rows="6" readonly></textarea>
+                <div class="flex gap-2 flex-wrap">
+                    <button id="copyFullInfoBtn" class="bg-primary/80 text-white px-4 py-2 rounded-lg text-sm">
+                        <i class="fa-solid fa-copy mr-1"></i> 复制完整信息
+                    </button>
+                    <button id="syncToWechatBtn" class="bg-secondary text-white px-4 py-2 rounded-lg text-sm">
+                        <i class="fa-brands fa-weixin mr-1"></i> 同步到公众号
+                    </button>
+                </div>
+            </div>
+
+            <!-- 公众号二维码提示区（默认隐藏） -->
+            <div id="wechatSyncTip" class="hidden text-center mb-4">
+                <p class="text-sm text-gray-700 mb-2">请打开微信，扫码关注后粘贴复制的信息发送</p>
+                <img 
+                    src="https://raw.githubusercontent.com/Ly918-cq/Ly918-cq2.github.io/main/wechat-qrcode.png.jpg"
+                    class="w-40 h-40 mx-auto border border-gray-200 p-2 rounded-lg mb-2"
+                    alt="纳科农品公众号二维码"
+                >
+                <p class="text-xs text-red-500">发送后你会收到微信新消息提醒，可在后台导出数据</p>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row justify-center gap-3">
+                <button id="exportPdfBtn" class="btn-primary w-full sm:w-auto">导出PDF</button>
+                <button id="exportJpgBtn" class="bg-secondary text-white font-medium px-6 py-3 rounded-lg hover:bg-secondary/90 w-full sm:w-auto">导出JPG</button>
+                <button id="backBtn" class="bg-gray-600 text-white font-medium px-6 py-3 rounded-lg hover:bg-gray-700 w-full sm:w-auto">返回修改</button>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-gray-800 text-white py-4 mt-8">
+        <div class="container mx-auto px-4 text-center text-sm">
+            <p>纳科农品 | Natcropp © 2026 仂昭国际贸易（重庆）有限公司</p>
+        </div>
+    </footer>
+
+    <script>
+        const APP_CONFIG = {
+            certPrefix: 'NC',
+            // 你的公众号查询图文链接
+            wechatQueryUrl: 'https://mp.weixin.qq.com/s/ioWZPFuxKIQ0H8dJKcAK4A'
+        };
+
+        const certForm = document.getElementById('certForm');
+        const formSection = document.getElementById('formSection');
+        const previewSection = document.getElementById('previewSection');
+        const certificate = document.getElementById('certificate');
+        const fullCertInfo = document.getElementById('fullCertInfo');
+        const wechatSyncTip = document.getElementById('wechatSyncTip');
+        let qrCodeInstance = null;
+        let currentCertId = '';
+        let currentCertData = {};
+
+        // 表单提交
+        certForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loading"></span>生成中...';
+            
+            try {
+                currentCertId = APP_CONFIG.certPrefix + Date.now();
+                currentCertData = {
+                    合格证编号: currentCertId,
+                    主体名称: document.getElementById('operatorName').value,
+                    主体类型: document.getElementById('operatorType').value,
+                    生产地址: document.getElementById('operatorAddress').value,
+                    联系电话: document.getElementById('operatorPhone').value,
+                    产品名称: document.getElementById('productName').value,
+                    品种: document.getElementById('productVariety').value || '无',
+                    数量: document.getElementById('productQuantity').value,
+                    日期: document.getElementById('produceDate').value ? new Date(document.getElementById('produceDate').value).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) : '-',
+                    检测结果: document.getElementById('detectResult').value,
+                    承诺人: document.getElementById('promisorName').value,
+                    生成时间: new Date().toLocaleString('zh-CN')
+                };
+
+                // 填充预览
+                Object.keys(currentCertData).forEach(key => {
+                    const previewKey = 'preview' + key;
+                    const el = document.getElementById(previewKey);
+                    if (el) el.textContent = currentCertData[key];
+                });
+
+                // 填充完整信息文本框
+                let infoText = '';
+                for (const [key, value] of Object.entries(currentCertData)) {
+                    infoText += `${key}：${value}\n`;
+                }
+                fullCertInfo.value = infoText;
+
+                // 生成二维码：指向查询图文页
+                const qrcode = document.getElementById('qrcode');
+                qrcode.innerHTML = '';
+                if (typeof QRCode === 'undefined') {
+                    alert('二维码库加载失败，请刷新页面重试');
+                    return;
+                }
+                qrCodeInstance = new QRCode(qrcode, {
+                    text: APP_CONFIG.wechatQueryUrl,
+                    width: 96,
+                    height: 96,
+                    colorDark: "#000000",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+
+                formSection.classList.add('hidden');
+                previewSection.classList.remove('hidden');
+                previewSection.scrollIntoView({ behavior: 'smooth' });
+
+            } catch (error) {
+                alert('生成失败：' + error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>生成合格证';
+            }
+        });
+
+        // 复制完整信息
+        document.getElementById('copyFullInfoBtn').addEventListener('click', () => {
+            fullCertInfo.select();
+            document.execCommand('copy');
+            alert('完整信息已复制，请前往公众号粘贴发送！');
+        });
+
+        // 同步到公众号（显示提示）
+        document.getElementById('syncToWechatBtn').addEventListener('click', () => {
+            wechatSyncTip.classList.remove('hidden');
+            wechatSyncTip.scrollIntoView({ behavior: 'smooth' });
+            // 先复制信息
+            fullCertInfo.select();
+            document.execCommand('copy');
+            alert('信息已复制，扫码发送即可！');
+        });
+
+        // 返回按钮
+        document.getElementById('backBtn').addEventListener('click', () => {
+            previewSection.classList.add('hidden');
+            formSection.classList.remove('hidden');
+            wechatSyncTip.classList.add('hidden');
+        });
+
+        // 导出PDF
+        document.getElementById('exportPdfBtn').addEventListener('click', () => {
+            const btn = document.getElementById('exportPdfBtn');
+            btn.disabled = true; btn.innerHTML = '<span class="loading"></span>导出中...';
+            setTimeout(() => {
+                html2canvas(certificate, { scale: 3, useCORS: true }).then(canvas => {
+                    const { jsPDF } = window.jspdf;
+                    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+                    const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                    const imgWidth = 210;
+                    const imgHeight = canvas.height * imgWidth / canvas.width;
+                    pdf.addImage(imgData, 'JPEG', 0, (297 - imgHeight) / 2, imgWidth, imgHeight);
+                    pdf.save(`合格证_${currentCertId}.pdf`);
+                    btn.disabled = false; btn.textContent = '导出PDF';
+                });
+            }, 500);
+        });
+
+        // 导出JPG
+        document.getElementById('exportJpgBtn').addEventListener('click', () => {
+            const btn = document.getElementById('exportJpgBtn');
+            btn.disabled = true; btn.innerHTML = '<span class="loading"></span>导出中...';
+            setTimeout(() => {
+                html2canvas(certificate, { scale: 3, useCORS: true }).then(canvas => {
+                    const link = document.createElement('a');
+                    link.download = `合格证_${currentCertId}.jpg`;
+                    link.href = canvas.toDataURL('image/jpeg', 0.95);
+                    link.click();
+                    btn.disabled = false; btn.textContent = '导出JPG';
+                });
+            }, 500);
+        });
+    </script>
+</body>
+</html>
